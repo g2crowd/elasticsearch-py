@@ -5,12 +5,12 @@
 import asyncio
 import ssl
 import os
-import urllib3
+import urllib3  # type: ignore
 import warnings
 
-import aiohttp
-import yarl
-from aiohttp.client_exceptions import ServerFingerprintMismatch, ServerTimeoutError
+import aiohttp  # type: ignore
+import yarl  # type: ignore
+from aiohttp.client_exceptions import ServerFingerprintMismatch, ServerTimeoutError  # type: ignore
 
 from .compat import get_running_loop
 from ..connection import Connection

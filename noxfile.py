@@ -34,10 +34,11 @@ def blacken(session):
 
 @nox.session()
 def lint(session):
-    session.install("flake8", "black")
+    session.install("flake8", "black", "mypy")
 
     session.run("black", "--target-version=py27", "--check", *SOURCE_FILES)
     session.run("flake8", *SOURCE_FILES)
+    session.run("mypy", "elasticsearch/")
     session.run("python", "utils/license_headers.py", "check", *SOURCE_FILES)
 
 

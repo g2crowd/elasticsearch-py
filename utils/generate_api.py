@@ -69,10 +69,15 @@ def is_valid_url(url):
 
 
 class Module:
-    def __init__(self, namespace):
+    def __init__(self, namespace, is_pyi=False):
         self.namespace = namespace
+        self.is_pyi = is_pyi
         self._apis = []
         self.parse_orig()
+
+        if not is_pyi:
+            self.pyi = Module(namespace, is_pyi=True)
+            self.pyi.orders = self.orders[:]
 
     def add(self, api):
         self._apis.append(api)
@@ -115,17 +120,23 @@ class Module:
             f.write(self.header)
             for api in self._apis:
                 f.write(api.to_python())
-        blacken(self.filepath)
+
+        if not self.is_pyi:
+            self.pyi.dump()
 
     @property
     def filepath(self):
-        return CODE_ROOT / f"elasticsearch/_async/client/{self.namespace}.py"
+        return (
+            CODE_ROOT
+            / f"elasticsearch/_async/client/{self.namespace}.py{'i' if self.is_pyi else ''}"
+        )
 
 
 class API:
-    def __init__(self, namespace, name, definition):
+    def __init__(self, namespace, name, definition, is_pyi=False):
         self.namespace = namespace
         self.name = name
+        self.is_pyi = is_pyi
 
         # overwrite the dict to maintain key order
         definition["params"] = {
@@ -172,6 +183,7 @@ class API:
             parts[p]["required"] = all(
                 p in url.get("parts", {}) for url in self._def["url"]["paths"]
             )
+            parts[p]["type"] = "Any"
 
         for k, sub in SUBSTITUTIONS.items():
             if k in parts:
@@ -264,10 +276,14 @@ class API:
         return required
 
     def to_python(self):
-        try:
-            t = jinja_env.get_template(f"overrides/{self.namespace}/{self.name}")
-        except TemplateNotFound:
-            t = jinja_env.get_template("base")
+        if self.is_pyi:
+            t = jinja_env.get_template("base_pyi")
+        else:
+            try:
+                t = jinja_env.get_template(f"overrides/{self.namespace}/{self.name}")
+            except TemplateNotFound:
+                t = jinja_env.get_template("base")
+
         return t.render(
             api=self, substitutions={v: k for k, v in SUBSTITUTIONS.items()}
         )
@@ -298,6 +314,7 @@ def read_modules():
                 modules[namespace] = Module(namespace)
 
             modules[namespace].add(API(namespace, name, api))
+            modules[namespace].pyi.add(API(namespace, name, api, is_pyi=True))
 
     return modules
 
@@ -325,7 +342,10 @@ def dump_modules(modules):
     filepaths = []
     for root, _, filenames in os.walk(CODE_ROOT / "elasticsearch/_async"):
         for filename in filenames:
-            if filename.endswith(".py") and filename != "utils.py":
+            if filename.rpartition(".")[-1] in (
+                "py",
+                "pyi",
+            ) and not filename.startswith("utils.py"):
                 filepaths.append(os.path.join(root, filename))
 
     unasync.unasync_files(filepaths, rules)
